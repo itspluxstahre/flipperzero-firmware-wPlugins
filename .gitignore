@@ -74,3 +74,5 @@ RM*-*.zip
 RM*-*.txt
 RM*-*-*/
 RM-*.sh
+RM*-*/*
+
