@@ -105,39 +105,6 @@ static bool nfc_device_parse_format_string(NfcDevice* dev, FuriString* format_st
     return false;
 }
 
-static bool nfc_device_save_mifare_ul_data(FlipperFormat* file, NfcDevice* dev) {
-    MfUltralightData* data = &dev->dev_data.mf_ul_data;
-
-    if (!flipper_format_write_comment_cstr(file, "Mifare Ultralight specific data")) {
-        return false;
-    }
-
-    if (!flipper_format_write_uint32(file, "Data format version", &nfc_mifare_ultralight_data_format_version, 1)) {
-        return false;
-    }
-
-    if (!flipper_format_write_hex(file, "Signature", data->signature, sizeof(data->signature))) {
-        return false;
-    }
-
-    if (!flipper_format_write_hex(file, "Mifare version", (uint8_t*)&data->version, sizeof(data->version))) {
-        return false;
-    }
-
-    if (!nfc_device_save_mifare_ul_counters(file, data)) {
-        return false;
-    }
-
-    if (!nfc_device_save_mifare_ul_pages(file, data)) {
-        return false;
-    }
-
-    if (!flipper_format_write_uint32(file, "Failed authentication attempts", &data->curr_authlim, 1)) {
-        return false;
-    }
-
-    return true;
-}
 
 static bool nfc_device_save_mifare_ul_counters(FlipperFormat* file, MfUltralightData* data) {
     FuriString* temp_str = furi_string_alloc();
@@ -184,6 +151,41 @@ static bool nfc_device_save_mifare_ul_pages(FlipperFormat* file, MfUltralightDat
     }
 
     furi_string_free(temp_str);
+    return true;
+}
+
+
+static bool nfc_device_save_mifare_ul_data(FlipperFormat* file, NfcDevice* dev) {
+    MfUltralightData* data = &dev->dev_data.mf_ul_data;
+
+    if (!flipper_format_write_comment_cstr(file, "Mifare Ultralight specific data")) {
+        return false;
+    }
+
+    if (!flipper_format_write_uint32(file, "Data format version", &nfc_mifare_ultralight_data_format_version, 1)) {
+        return false;
+    }
+
+    if (!flipper_format_write_hex(file, "Signature", data->signature, sizeof(data->signature))) {
+        return false;
+    }
+
+    if (!flipper_format_write_hex(file, "Mifare version", (uint8_t*)&data->version, sizeof(data->version))) {
+        return false;
+    }
+
+    if (!nfc_device_save_mifare_ul_counters(file, data)) {
+        return false;
+    }
+
+    if (!nfc_device_save_mifare_ul_pages(file, data)) {
+        return false;
+    }
+
+    if (!flipper_format_write_uint32(file, "Failed authentication attempts", (uint32_t*)&data->curr_authlim, 1)) {
+        return false;
+    }
+
     return true;
 }
 
