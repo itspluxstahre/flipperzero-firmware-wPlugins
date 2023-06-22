@@ -296,43 +296,85 @@ bool nfc_device_load_mifare_ul_data(FlipperFormat* file, NfcDevice* dev) {
     return true;
 }
 
+bool write_mifare_df_key_id(
+    FlipperFormat* file,
+    uint8_t key_id,
+    const char* prefix,
+    FuriString* key) {
+    furi_string_printf(key, "%s Change Key ID", prefix);
+    return flipper_format_write_hex(file, furi_string_get_cstr(key), &key_id, 1);
+}
+
+bool write_mifare_df_bool(
+    FlipperFormat* file,
+    bool value,
+    const char* prefix,
+    const char* name,
+    FuriString* key) {
+    furi_string_printf(key, "%s %s", prefix, name);
+    return flipper_format_write_bool(file, furi_string_get_cstr(key), &value, 1);
+}
+
+bool write_mifare_df_hex(
+    FlipperFormat* file,
+    uint8_t value,
+    const char* prefix,
+    const char* name,
+    FuriString* key) {
+    furi_string_printf(key, "%s %s", prefix, name);
+    return flipper_format_write_hex(file, furi_string_get_cstr(key), &value, 1);
+}
+
+bool write_mifare_df_key_versions(
+    FlipperFormat* file,
+    MifareDesfireKeySettings* ks,
+    const char* prefix,
+    FuriString* key) {
+    for (MifareDesfireKeyVersion* kv = ks->key_version_head; kv; kv = kv->next) {
+        furi_string_printf(key, "%s Key %d Version", prefix, kv->id);
+        if (!flipper_format_write_hex(file, furi_string_get_cstr(key), &kv->version, 1)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool nfc_device_save_mifare_df_key_settings(
     FlipperFormat* file,
     MifareDesfireKeySettings* ks,
     const char* prefix) {
+    FuriString* key = furi_string_alloc();
     bool saved = false;
-    FuriString* key;
-    key = furi_string_alloc();
 
     do {
-        furi_string_printf(key, "%s Change Key ID", prefix);
-        if(!flipper_format_write_hex(file, furi_string_get_cstr(key), &ks->change_key_id, 1))
+        if (!write_mifare_df_key_id(file, ks->change_key_id, prefix, key)) {
             break;
-        furi_string_printf(key, "%s Config Changeable", prefix);
-        if(!flipper_format_write_bool(file, furi_string_get_cstr(key), &ks->config_changeable, 1))
-            break;
-        furi_string_printf(key, "%s Free Create Delete", prefix);
-        if(!flipper_format_write_bool(file, furi_string_get_cstr(key), &ks->free_create_delete, 1))
-            break;
-        furi_string_printf(key, "%s Free Directory List", prefix);
-        if(!flipper_format_write_bool(file, furi_string_get_cstr(key), &ks->free_directory_list, 1))
-            break;
-        furi_string_printf(key, "%s Key Changeable", prefix);
-        if(!flipper_format_write_bool(
-               file, furi_string_get_cstr(key), &ks->master_key_changeable, 1))
-            break;
-        if(ks->flags) {
-            furi_string_printf(key, "%s Flags", prefix);
-            if(!flipper_format_write_hex(file, furi_string_get_cstr(key), &ks->flags, 1)) break;
         }
-        furi_string_printf(key, "%s Max Keys", prefix);
-        if(!flipper_format_write_hex(file, furi_string_get_cstr(key), &ks->max_keys, 1)) break;
-        for(MifareDesfireKeyVersion* kv = ks->key_version_head; kv; kv = kv->next) {
-            furi_string_printf(key, "%s Key %d Version", prefix, kv->id);
-            if(!flipper_format_write_hex(file, furi_string_get_cstr(key), &kv->version, 1)) break;
+        if (!write_mifare_df_bool(file, ks->config_changeable, prefix, "Config Changeable", key)) {
+            break;
+        }
+        if (!write_mifare_df_bool(file, ks->free_create_delete, prefix, "Free Create Delete", key)) {
+            break;
+        }
+        if (!write_mifare_df_bool(file, ks->free_directory_list, prefix, "Free Directory List", key)) {
+            break;
+        }
+        if (!write_mifare_df_bool(file, ks->master_key_changeable, prefix, "Key Changeable", key)) {
+            break;
+        }
+        if (ks->flags) {
+            if (!write_mifare_df_hex(file, ks->flags, prefix, "Flags", key)) {
+                break;
+            }
+        }
+        if (!write_mifare_df_hex(file, ks->max_keys, prefix, "Max Keys", key)) {
+            break;
+        }
+        if (!write_mifare_df_key_versions(file, ks, prefix, key)) {
+            break;
         }
         saved = true;
-    } while(false);
+    } while (false);
 
     furi_string_free(key);
     return saved;
