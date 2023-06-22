@@ -106,64 +106,85 @@ static bool nfc_device_parse_format_string(NfcDevice* dev, FuriString* format_st
 }
 
 static bool nfc_device_save_mifare_ul_data(FlipperFormat* file, NfcDevice* dev) {
-    bool saved = false;
     MfUltralightData* data = &dev->dev_data.mf_ul_data;
-    FuriString* temp_str;
-    temp_str = furi_string_alloc();
 
-    // Save Mifare Ultralight specific data
-    do {
-        if(!flipper_format_write_comment_cstr(file, "Mifare Ultralight specific data")) break;
-        if(!flipper_format_write_uint32(
-               file, "Data format version", &nfc_mifare_ultralight_data_format_version, 1))
-            break;
-        if(!flipper_format_write_hex(file, "Signature", data->signature, sizeof(data->signature)))
-            break;
-        if(!flipper_format_write_hex(
-               file, "Mifare version", (uint8_t*)&data->version, sizeof(data->version)))
-            break;
-        // Write conters and tearing flags data
-        bool counters_saved = true;
-        for(uint8_t i = 0; i < 3; i++) {
-            furi_string_printf(temp_str, "Counter %d", i);
-            if(!flipper_format_write_uint32(
-                   file, furi_string_get_cstr(temp_str), &data->counter[i], 1)) {
-                counters_saved = false;
-                break;
-            }
-            furi_string_printf(temp_str, "Tearing %d", i);
-            if(!flipper_format_write_hex(
-                   file, furi_string_get_cstr(temp_str), &data->tearing[i], 1)) {
-                counters_saved = false;
-                break;
-            }
+    if (!flipper_format_write_comment_cstr(file, "Mifare Ultralight specific data")) {
+        return false;
+    }
+
+    if (!flipper_format_write_uint32(file, "Data format version", &nfc_mifare_ultralight_data_format_version, 1)) {
+        return false;
+    }
+
+    if (!flipper_format_write_hex(file, "Signature", data->signature, sizeof(data->signature))) {
+        return false;
+    }
+
+    if (!flipper_format_write_hex(file, "Mifare version", (uint8_t*)&data->version, sizeof(data->version))) {
+        return false;
+    }
+
+    if (!nfc_device_save_mifare_ul_counters(file, data)) {
+        return false;
+    }
+
+    if (!nfc_device_save_mifare_ul_pages(file, data)) {
+        return false;
+    }
+
+    if (!flipper_format_write_uint32(file, "Failed authentication attempts", &data->curr_authlim, 1)) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool nfc_device_save_mifare_ul_counters(FlipperFormat* file, MfUltralightData* data) {
+    FuriString* temp_str = furi_string_alloc();
+
+    for (uint8_t i = 0; i < 3; i++) {
+        furi_string_printf(temp_str, "Counter %d", i);
+        if (!flipper_format_write_uint32(file, furi_string_get_cstr(temp_str), &data->counter[i], 1)) {
+            furi_string_free(temp_str);
+            return false;
         }
-        if(!counters_saved) break;
-        // Write pages data
-        uint32_t pages_total = data->data_size / 4;
-        if(!flipper_format_write_uint32(file, "Pages total", &pages_total, 1)) break;
-        uint32_t pages_read = data->data_read / 4;
-        if(!flipper_format_write_uint32(file, "Pages read", &pages_read, 1)) break;
-        bool pages_saved = true;
-        for(uint16_t i = 0; i < data->data_size; i += 4) {
-            furi_string_printf(temp_str, "Page %d", i / 4);
-            if(!flipper_format_write_hex(file, furi_string_get_cstr(temp_str), &data->data[i], 4)) {
-                pages_saved = false;
-                break;
-            }
+
+        furi_string_printf(temp_str, "Tearing %d", i);
+        if (!flipper_format_write_hex(file, furi_string_get_cstr(temp_str), &data->tearing[i], 1)) {
+            furi_string_free(temp_str);
+            return false;
         }
-        if(!pages_saved) break;
-
-        // Write authentication counter
-        uint32_t auth_counter = data->curr_authlim;
-        if(!flipper_format_write_uint32(file, "Failed authentication attempts", &auth_counter, 1))
-            break;
-
-        saved = true;
-    } while(false);
+    }
 
     furi_string_free(temp_str);
-    return saved;
+    return true;
+}
+
+static bool nfc_device_save_mifare_ul_pages(FlipperFormat* file, MfUltralightData* data) {
+    FuriString* temp_str = furi_string_alloc();
+
+    uint32_t pages_total = data->data_size / 4;
+    if (!flipper_format_write_uint32(file, "Pages total", &pages_total, 1)) {
+        furi_string_free(temp_str);
+        return false;
+    }
+
+    uint32_t pages_read = data->data_read / 4;
+    if (!flipper_format_write_uint32(file, "Pages read", &pages_read, 1)) {
+        furi_string_free(temp_str);
+        return false;
+    }
+
+    for (uint16_t i = 0; i < data->data_size; i += 4) {
+        furi_string_printf(temp_str, "Page %d", i / 4);
+        if (!flipper_format_write_hex(file, furi_string_get_cstr(temp_str), &data->data[i], 4)) {
+            furi_string_free(temp_str);
+            return false;
+        }
+    }
+
+    furi_string_free(temp_str);
+    return true;
 }
 
 bool nfc_device_load_mifare_ul_data(FlipperFormat* file, NfcDevice* dev) {
