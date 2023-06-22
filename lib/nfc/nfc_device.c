@@ -49,25 +49,33 @@ void nfc_device_free(NfcDevice* nfc_dev) {
 }
 
 static void nfc_device_prepare_format_string(NfcDevice* dev, FuriString* format_string) {
-    if(dev->format == NfcDeviceSaveFormatUid) {
-        furi_string_set(format_string, "UID");
-    } else if(dev->format == NfcDeviceSaveFormatBankCard) {
-        furi_string_set(format_string, "Bank card");
-    } else if(dev->format == NfcDeviceSaveFormatMifareUl) {
-        furi_string_set(format_string, nfc_mf_ul_type(dev->dev_data.mf_ul_data.type, true));
-    } else if(dev->format == NfcDeviceSaveFormatMifareClassic) {
-        furi_string_set(format_string, "Mifare Classic");
-    } else if(dev->format == NfcDeviceSaveFormatMifareDesfire) {
-        furi_string_set(format_string, "Mifare DESFire");
-    } else if(dev->format == NfcDeviceSaveFormatNfcV) {
-        furi_string_set(format_string, "ISO15693");
-    } else if(dev->format == NfcDeviceSaveFormatFelica) {
-        furi_string_set(format_string, "FeliCa");
-    } else {
-        furi_string_set(format_string, "Unknown");
+    switch(dev->format) {
+        case NfcDeviceSaveFormatUid:
+            furi_string_set(format_string, "UID");
+            break;
+        case NfcDeviceSaveFormatBankCard:
+            furi_string_set(format_string, "Bank card");
+            break;
+        case NfcDeviceSaveFormatMifareUl:
+            furi_string_set(format_string, nfc_mf_ul_type(dev->dev_data.mf_ul_data.type, true));
+            break;
+        case NfcDeviceSaveFormatMifareClassic:
+            furi_string_set(format_string, "Mifare Classic");
+            break;
+        case NfcDeviceSaveFormatMifareDesfire:
+            furi_string_set(format_string, "Mifare DESFire");
+            break;
+        case NfcDeviceSaveFormatNfcV:
+            furi_string_set(format_string, "ISO15693");
+            break;
+        case NfcDeviceSaveFormatFelica:
+            furi_string_set(format_string, "FeliCa");
+            break;
+        default:
+            furi_string_set(format_string, "Unknown");
+            break;
     }
 }
-
 static bool nfc_device_parse_format_string(NfcDevice* dev, FuriString* format_string) {
     if(furi_string_start_with_str(format_string, "UID")) {
         dev->format = NfcDeviceSaveFormatUid;
