@@ -76,40 +76,31 @@ static void nfc_device_prepare_format_string(NfcDevice* dev, FuriString* format_
             break;
     }
 }
+
 static bool nfc_device_parse_format_string(NfcDevice* dev, FuriString* format_string) {
-    if(furi_string_start_with_str(format_string, "UID")) {
-        dev->format = NfcDeviceSaveFormatUid;
-        dev->dev_data.protocol = NfcDeviceProtocolUnknown;
-        return true;
-    }
-    if(furi_string_start_with_str(format_string, "Bank card")) {
-        dev->format = NfcDeviceSaveFormatBankCard;
-        dev->dev_data.protocol = NfcDeviceProtocolEMV;
-        return true;
-    }
-    // Check Mifare Ultralight types
-    for(MfUltralightType type = MfUltralightTypeUnknown; type < MfUltralightTypeNum; type++) {
-        if(furi_string_equal(format_string, nfc_mf_ul_type(type, true))) {
-            dev->format = NfcDeviceSaveFormatMifareUl;
-            dev->dev_data.protocol = NfcDeviceProtocolMifareUl;
-            dev->dev_data.mf_ul_data.type = type;
+    static const struct {
+        const char* prefix;
+        NfcDeviceSaveFormat format;
+        NfcDeviceProtocol protocol;
+        MfUltralightType mf_ul_type;
+    } formats[] = {
+        {"UID", NfcDeviceSaveFormatUid, NfcDeviceProtocolUnknown, MfUltralightTypeUnknown},
+        {"Bank card", NfcDeviceSaveFormatBankCard, NfcDeviceProtocolEMV, MfUltralightTypeUnknown},
+        {"Mifare Classic", NfcDeviceSaveFormatMifareClassic, NfcDeviceProtocolMifareClassic, MfUltralightTypeUnknown},
+        {"Mifare DESFire", NfcDeviceSaveFormatMifareDesfire, NfcDeviceProtocolMifareDesfire, MfUltralightTypeUnknown},
+        {"ISO15693", NfcDeviceSaveFormatNfcV, NfcDeviceProtocolNfcV, MfUltralightTypeUnknown},
+    };
+    for (size_t i = 0; i < sizeof(formats) / sizeof(formats[0]); i++) {
+        if (furi_string_start_with_str(format_string, formats[i].prefix)) {
+            dev->format = formats[i].format;
+            dev->dev_data.protocol = formats[i].protocol;
+            dev->dev_data.mf_ul_data.type = formats[i].mf_ul_type;
+            if (formats[i].mf_ul_type != MfUltralightTypeUnknown) {
+                dev->format = NfcDeviceSaveFormatMifareUl;
+                dev->dev_data.protocol = NfcDeviceProtocolMifareUl;
+            }
             return true;
         }
-    }
-    if(furi_string_start_with_str(format_string, "Mifare Classic")) {
-        dev->format = NfcDeviceSaveFormatMifareClassic;
-        dev->dev_data.protocol = NfcDeviceProtocolMifareClassic;
-        return true;
-    }
-    if(furi_string_start_with_str(format_string, "Mifare DESFire")) {
-        dev->format = NfcDeviceSaveFormatMifareDesfire;
-        dev->dev_data.protocol = NfcDeviceProtocolMifareDesfire;
-        return true;
-    }
-    if(furi_string_start_with_str(format_string, "ISO15693")) {
-        dev->format = NfcDeviceSaveFormatNfcV;
-        dev->dev_data.protocol = NfcDeviceProtocolNfcV;
-        return true;
     }
     return false;
 }
