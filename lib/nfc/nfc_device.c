@@ -558,118 +558,221 @@ static bool nfc_device_save_mifare_df_app(FlipperFormat* file, MifareDesfireAppl
     return saved;
 }
 
-bool nfc_device_load_mifare_df_app(FlipperFormat* file, MifareDesfireApplication* app) {
-    bool parsed = false;
-    FuriString *prefix, *key;
-    prefix =
-        furi_string_alloc_printf("Application %02x%02x%02x", app->id[0], app->id[1], app->id[2]);
-    key = furi_string_alloc();
-    uint8_t* tmp = NULL;
-    MifareDesfireFile* f = NULL;
-
-    do {
-        app->key_settings = malloc(sizeof(MifareDesfireKeySettings));
-        memset(app->key_settings, 0, sizeof(MifareDesfireKeySettings));
-        if(!nfc_device_load_mifare_df_key_settings(
-               file, app->key_settings, furi_string_get_cstr(prefix))) {
-            free(app->key_settings);
-            app->key_settings = NULL;
-            break;
-        }
-        furi_string_printf(key, "%s File IDs", furi_string_get_cstr(prefix));
-        uint32_t n_files;
-        if(!flipper_format_get_value_count(file, furi_string_get_cstr(key), &n_files)) break;
-        tmp = malloc(n_files);
-        if(!flipper_format_read_hex(file, furi_string_get_cstr(key), tmp, n_files)) break;
-        MifareDesfireFile** file_head = &app->file_head;
-        bool parsed_files = true;
-        for(uint32_t i = 0; i < n_files; i++) {
-            parsed_files = false;
-            f = malloc(sizeof(MifareDesfireFile));
-            memset(f, 0, sizeof(MifareDesfireFile));
-            f->id = tmp[i];
-            furi_string_printf(key, "%s File %d Type", furi_string_get_cstr(prefix), f->id);
-            if(!flipper_format_read_hex(file, furi_string_get_cstr(key), &f->type, 1)) break;
-            furi_string_printf(
-                key, "%s File %d Communication Settings", furi_string_get_cstr(prefix), f->id);
-            if(!flipper_format_read_hex(file, furi_string_get_cstr(key), &f->comm, 1)) break;
-            furi_string_printf(
-                key, "%s File %d Access Rights", furi_string_get_cstr(prefix), f->id);
-            if(!flipper_format_read_hex(
-                   file, furi_string_get_cstr(key), (uint8_t*)&f->access_rights, 2))
-                break;
-            if(f->type == MifareDesfireFileTypeStandard ||
-               f->type == MifareDesfireFileTypeBackup) {
-                furi_string_printf(key, "%s File %d Size", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_read_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.data.size, 1))
-                    break;
-            } else if(f->type == MifareDesfireFileTypeValue) {
-                furi_string_printf(
-                    key, "%s File %d Hi Limit", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_read_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.value.hi_limit, 1))
-                    break;
-                furi_string_printf(
-                    key, "%s File %d Lo Limit", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_read_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.value.lo_limit, 1))
-                    break;
-                furi_string_printf(
-                    key, "%s File %d Limited Credit Value", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_read_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.value.limited_credit_value, 1))
-                    break;
-                furi_string_printf(
-                    key, "%s File %d Limited Credit Enabled", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_read_bool(
-                       file,
-                       furi_string_get_cstr(key),
-                       &f->settings.value.limited_credit_enabled,
-                       1))
-                    break;
-            } else if(
-                f->type == MifareDesfireFileTypeLinearRecord ||
-                f->type == MifareDesfireFileTypeCyclicRecord) {
-                furi_string_printf(key, "%s File %d Size", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_read_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.record.size, 1))
-                    break;
-                furi_string_printf(key, "%s File %d Max", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_read_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.record.max, 1))
-                    break;
-                furi_string_printf(key, "%s File %d Cur", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_read_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.record.cur, 1))
-                    break;
-            }
-            furi_string_printf(key, "%s File %d", furi_string_get_cstr(prefix), f->id);
-            if(flipper_format_key_exist(file, furi_string_get_cstr(key))) {
-                uint32_t size;
-                if(!flipper_format_get_value_count(file, furi_string_get_cstr(key), &size)) break;
-                f->contents = malloc(size);
-                if(!flipper_format_read_hex(file, furi_string_get_cstr(key), f->contents, size))
-                    break;
-            }
-            *file_head = f;
-            file_head = &f->next;
-            f = NULL;
-            parsed_files = true;
-        }
-        if(!parsed_files) {
-            break;
-        }
-        parsed = true;
-    } while(false);
-
-    if(f) {
-        free(f->contents);
-        free(f);
-    }
-    free(tmp);
-    furi_string_free(prefix);
+bool nfc_device_load_mifare_df_file_ids(FlipperFormat* file, FuriString* prefix, uint32_t* n_files) {
+    FuriString* key = furi_string_alloc_printf("%s File IDs", furi_string_get_cstr(prefix));
+    bool parsed = flipper_format_get_value_count(file, furi_string_get_cstr(key), n_files);
     furi_string_free(key);
+    return parsed;
+}
+
+bool nfc_device_load_mifare_df_file_type(FlipperFormat* file, FuriString* prefix, MifareDesfireFile* file_obj) {
+    FuriString* key = furi_string_alloc_printf("%s File %d Type", furi_string_get_cstr(prefix), file_obj->id);
+    bool parsed = flipper_format_read_hex(file, furi_string_get_cstr(key), &file_obj->type, 1);
+    furi_string_free(key);
+    return parsed;
+}
+
+bool nfc_device_load_mifare_df_file_communication_settings(FlipperFormat* file, FuriString* prefix, MifareDesfireFile* file_obj) {
+    FuriString* key = furi_string_alloc_printf("%s File %d Communication Settings", furi_string_get_cstr(prefix), file_obj->id);
+    bool parsed = flipper_format_read_hex(file, furi_string_get_cstr(key), &file_obj->comm, 1);
+    furi_string_free(key);
+    return parsed;
+}
+
+bool nfc_device_load_mifare_df_file_access_rights(FlipperFormat* file, FuriString* prefix, MifareDesfireFile* file_obj) {
+    FuriString* key = furi_string_alloc_printf("%s File %d Access Rights", furi_string_get_cstr(prefix), file_obj->id);
+    bool parsed = flipper_format_read_hex(file, furi_string_get_cstr(key), (uint8_t*)&file_obj->access_rights, 2);
+    furi_string_free(key);
+    return parsed;
+}
+
+bool nfc_device_load_mifare_df_file_standard_settings(FlipperFormat* file, FuriString* prefix, MifareDesfireFile* file_obj) {
+    FuriString* key = furi_string_alloc_printf("%s File %d Size", furi_string_get_cstr(prefix), file_obj->id);
+    bool parsed = flipper_format_read_uint32(file, furi_string_get_cstr(key), &file_obj->settings.data.size, 1);
+    furi_string_free(key);
+    return parsed;
+}
+
+
+bool nfc_device_load_mifare_df_file_value_settings(FlipperFormat* file, FuriString* prefix, MifareDesfireFile* file_obj) {
+    bool parsed = true;
+
+    FuriString* key = furi_string_alloc_printf("%s File %d Hi Limit", furi_string_get_cstr(prefix), file_obj->id);
+    parsed = flipper_format_read_uint32(file, furi_string_get_cstr(key), &file_obj->settings.value.hi_limit, 1);
+    furi_string_free(key);
+    if (!parsed) {
+        return false;
+    }
+
+    key = furi_string_alloc_printf("%s File %d Lo Limit", furi_string_get_cstr(prefix), file_obj->id);
+    parsed = flipper_format_read_uint32(file, furi_string_get_cstr(key), &file_obj->settings.value.lo_limit, 1);
+    furi_string_free(key);
+    if (!parsed) {
+        return false;
+    }
+
+    key = furi_string_alloc_printf("%s File %d Limited Credit Value", furi_string_get_cstr(prefix), file_obj->id);
+    parsed = flipper_format_read_uint32(file, furi_string_get_cstr(key), &file_obj->settings.value.limited_credit_value, 1);
+    furi_string_free(key);
+    if (!parsed) {
+        return false;
+    }
+
+    key = furi_string_alloc_printf("%s File %d Limited Credit Enabled", furi_string_get_cstr(prefix), file_obj->id);
+    parsed = flipper_format_read_bool(file, furi_string_get_cstr(key), &file_obj->settings.value.limited_credit_enabled, 1);
+    furi_string_free(key);
+    if (!parsed) {
+        return false;
+    }
+
+    return true;
+}
+
+
+bool nfc_device_load_mifare_df_file_record_settings(FlipperFormat* file, FuriString* prefix, MifareDesfireFile* file_obj) {
+    FuriString* key = furi_string_alloc_printf("%s File %d Size", furi_string_get_cstr(prefix), file_obj->id);
+    bool parsed = flipper_format_read_uint32(file, furi_string_get_cstr(key), &file_obj->settings.record.size, 1);
+    furi_string_free(key);
+    if (!parsed) {
+        return false;
+    }
+
+    key = furi_string_alloc_printf("%s File %d Max", furi_string_get_cstr(prefix), file_obj->id);
+    parsed = flipper_format_read_uint32(file, furi_string_get_cstr(key), &file_obj->settings.record.max, 1);
+    furi_string_free(key);
+    if (!parsed) {
+        return false;
+    }
+
+    key = furi_string_alloc_printf("%s File %d Cur", furi_string_get_cstr(prefix), file_obj->id);
+    parsed = flipper_format_read_uint32(file, furi_string_get_cstr(key), &file_obj->settings.record.cur, 1);
+    furi_string_free(key);
+    if (!parsed) {
+        return false;
+    }
+
+    return true;
+}
+
+
+bool nfc_device_load_mifare_df_file_settings(FlipperFormat* file, FuriString* prefix, MifareDesfireFile* file_obj) {
+    bool parsed = true;
+
+    switch (file_obj->type) {
+        case MifareDesfireFileTypeStandard:
+        case MifareDesfireFileTypeBackup:
+            parsed = nfc_device_load_mifare_df_file_standard_settings(file, prefix, file_obj);
+            break;
+        case MifareDesfireFileTypeValue:
+            parsed = nfc_device_load_mifare_df_file_value_settings(file, prefix, file_obj);
+            break;
+        case MifareDesfireFileTypeLinearRecord:
+        case MifareDesfireFileTypeCyclicRecord:
+            parsed = nfc_device_load_mifare_df_file_record_settings(file, prefix, file_obj);
+            break;
+        default:
+            parsed = false;
+            break;
+    }
+
+    return parsed;
+}
+
+bool nfc_device_load_mifare_df_file_contents(FlipperFormat* file, FuriString* prefix, MifareDesfireFile* file_obj) {
+    FuriString* key = furi_string_alloc_printf("%s File %d", furi_string_get_cstr(prefix), file_obj->id);
+    bool parsed = flipper_format_key_exist(file, furi_string_get_cstr(key));
+    if (parsed) {
+        uint32_t size;
+        if (!flipper_format_get_value_count(file, furi_string_get_cstr(key), &size)) {
+            parsed = false;
+        } else {
+            file_obj->contents = malloc(size);
+            parsed = flipper_format_read_hex(file, furi_string_get_cstr(key), file_obj->contents, size);
+        }
+    }
+    furi_string_free(key);
+    return parsed;
+}
+
+bool nfc_device_load_mifare_df_files(FlipperFormat* file, FuriString* prefix, uint32_t n_files, MifareDesfireFile** file_head) {
+    bool parsed_files = true;
+    MifareDesfireFile* current_file = NULL;
+
+    for (uint32_t i = 0; i < n_files; i++) {
+        current_file = malloc(sizeof(MifareDesfireFile));
+        memset(current_file, 0, sizeof(MifareDesfireFile));
+        current_file->id = i;
+
+        if (!nfc_device_load_mifare_df_file_type(file, prefix, current_file)) {
+            parsed_files = false;
+            break;
+        }
+
+        if (!nfc_device_load_mifare_df_file_communication_settings(file, prefix, current_file)) {
+            parsed_files = false;
+            break;
+        }
+
+        if (!nfc_device_load_mifare_df_file_access_rights(file, prefix, current_file)) {
+            parsed_files = false;
+            break;
+        }
+
+        if (!nfc_device_load_mifare_df_file_settings(file, prefix, current_file)) {
+            parsed_files = false;
+            break;
+        }
+
+        if (!nfc_device_load_mifare_df_file_contents(file, prefix, current_file)) {
+            parsed_files = false;
+            break;
+        }
+
+        *file_head = current_file;
+        file_head = &current_file->next;
+    }
+
+    return parsed_files;
+}
+
+void nfc_device_free_mifare_df_files(MifareDesfireFile* file_head) {
+    MifareDesfireFile* current_file = file_head;
+    while (current_file != NULL) {
+        MifareDesfireFile* next_file = current_file->next;
+        free(current_file->contents);
+        free(current_file);
+        current_file = next_file;
+    }
+}
+
+bool nfc_device_load_mifare_df_app(FlipperFormat* file, MifareDesfireApplication* app) {
+    FuriString* prefix = furi_string_alloc_printf("Application %02x%02x%02x", app->id[0], app->id[1], app->id[2]);
+    bool parsed = false;
+
+    app->key_settings = malloc(sizeof(MifareDesfireKeySettings));
+    memset(app->key_settings, 0, sizeof(MifareDesfireKeySettings));
+    if (!nfc_device_load_mifare_df_key_settings(file, app->key_settings, furi_string_get_cstr(prefix))) {
+        free(app->key_settings);
+        app->key_settings = NULL;
+        goto cleanup;
+    }
+
+    uint32_t n_files;
+    if (!nfc_device_load_mifare_df_file_ids(file, prefix, &n_files)) {
+        goto cleanup;
+    }
+
+    MifareDesfireFile* file_head = NULL;
+    if (!nfc_device_load_mifare_df_files(file, prefix, n_files, &file_head)) {
+        nfc_device_free_mifare_df_files(file_head);
+        goto cleanup;
+    }
+
+    app->file_head = file_head;
+    parsed = true;
+
+cleanup:
+    furi_string_free(prefix);
     return parsed;
 }
 
