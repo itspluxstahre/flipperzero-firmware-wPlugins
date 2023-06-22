@@ -81,7 +81,7 @@ static bool nfc_device_parse_format_string(NfcDevice* dev, FuriString* format_st
     static const struct {
         const char* prefix;
         NfcDeviceSaveFormat format;
-        NfcDeviceProtocol protocol;
+        NfcProtocol protocol;
         MfUltralightType mf_ul_type;
     } formats[] = {
         {"UID", NfcDeviceSaveFormatUid, NfcDeviceProtocolUnknown, MfUltralightTypeUnknown},
