@@ -410,6 +410,7 @@ bool nfc_device_load_mifare_df_key_settings(
         }
         furi_string_printf(key, "%s Max Keys", prefix);
         if(!flipper_format_read_hex(file, furi_string_get_cstr(key), &ks->max_keys, 1)) break;
+
         ks->flags |= ks->max_keys >> 4;
         ks->max_keys &= 0xF;
         MifareDesfireKeyVersion** kv_head = &ks->key_version_head;
@@ -432,111 +433,128 @@ bool nfc_device_load_mifare_df_key_settings(
     return parsed;
 }
 
+
 static bool nfc_device_save_mifare_df_app(FlipperFormat* file, MifareDesfireApplication* app) {
-    bool saved = false;
-    FuriString *prefix, *key;
-    prefix =
-        furi_string_alloc_printf("Application %02x%02x%02x", app->id[0], app->id[1], app->id[2]);
-    key = furi_string_alloc();
+    FuriString* prefix = furi_string_alloc_printf("Application %02x%02x%02x", app->id[0], app->id[1], app->id[2]);
+    FuriString* key = furi_string_alloc();
     uint8_t* tmp = NULL;
+    bool saved = false;
 
     do {
-        if(app->key_settings) {
-            if(!nfc_device_save_mifare_df_key_settings(
-                   file, app->key_settings, furi_string_get_cstr(prefix)))
+        if (app->key_settings) {
+            if (!nfc_device_save_mifare_df_key_settings(file, app->key_settings, furi_string_get_cstr(prefix))) {
                 break;
-        }
-        if(!app->file_head) break;
-        uint32_t n_files = 0;
-        for(MifareDesfireFile* f = app->file_head; f; f = f->next) {
-            n_files++;
-        }
-        tmp = malloc(n_files);
-        int i = 0;
-        for(MifareDesfireFile* f = app->file_head; f; f = f->next) {
-            tmp[i++] = f->id;
-        }
-        furi_string_printf(key, "%s File IDs", furi_string_get_cstr(prefix));
-        if(!flipper_format_write_hex(file, furi_string_get_cstr(key), tmp, n_files)) break;
-        bool saved_files = true;
-        for(MifareDesfireFile* f = app->file_head; f; f = f->next) {
-            saved_files = false;
-            furi_string_printf(key, "%s File %d Type", furi_string_get_cstr(prefix), f->id);
-            if(!flipper_format_write_hex(file, furi_string_get_cstr(key), &f->type, 1)) break;
-            furi_string_printf(
-                key, "%s File %d Communication Settings", furi_string_get_cstr(prefix), f->id);
-            if(!flipper_format_write_hex(file, furi_string_get_cstr(key), &f->comm, 1)) break;
-            furi_string_printf(
-                key, "%s File %d Access Rights", furi_string_get_cstr(prefix), f->id);
-            if(!flipper_format_write_hex(
-                   file, furi_string_get_cstr(key), (uint8_t*)&f->access_rights, 2))
-                break;
-            uint16_t size = 0;
-            if(f->type == MifareDesfireFileTypeStandard ||
-               f->type == MifareDesfireFileTypeBackup) {
-                size = f->settings.data.size;
-                furi_string_printf(key, "%s File %d Size", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_write_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.data.size, 1))
-                    break;
-            } else if(f->type == MifareDesfireFileTypeValue) {
-                furi_string_printf(
-                    key, "%s File %d Hi Limit", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_write_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.value.hi_limit, 1))
-                    break;
-                furi_string_printf(
-                    key, "%s File %d Lo Limit", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_write_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.value.lo_limit, 1))
-                    break;
-                furi_string_printf(
-                    key, "%s File %d Limited Credit Value", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_write_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.value.limited_credit_value, 1))
-                    break;
-                furi_string_printf(
-                    key, "%s File %d Limited Credit Enabled", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_write_bool(
-                       file,
-                       furi_string_get_cstr(key),
-                       &f->settings.value.limited_credit_enabled,
-                       1))
-                    break;
-                size = 4;
-            } else if(
-                f->type == MifareDesfireFileTypeLinearRecord ||
-                f->type == MifareDesfireFileTypeCyclicRecord) {
-                furi_string_printf(key, "%s File %d Size", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_write_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.record.size, 1))
-                    break;
-                furi_string_printf(key, "%s File %d Max", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_write_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.record.max, 1))
-                    break;
-                furi_string_printf(key, "%s File %d Cur", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_write_uint32(
-                       file, furi_string_get_cstr(key), &f->settings.record.cur, 1))
-                    break;
-                size = f->settings.record.size * f->settings.record.cur;
             }
-            if(f->contents) {
-                furi_string_printf(key, "%s File %d", furi_string_get_cstr(prefix), f->id);
-                if(!flipper_format_write_hex(file, furi_string_get_cstr(key), f->contents, size))
-                    break;
-            }
-            saved_files = true;
         }
-        if(!saved_files) {
+
+        if (!app->file_head) {
             break;
         }
+
+        uint32_t n_files = 0;
+        for (MifareDesfireFile* f = app->file_head; f; f = f->next) {
+            n_files++;
+        }
+
+        tmp = malloc(n_files);
+        int i = 0;
+        for (MifareDesfireFile* f = app->file_head; f; f = f->next) {
+            tmp[i++] = f->id;
+        }
+
+        furi_string_printf(key, "%s File IDs", furi_string_get_cstr(prefix));
+        if (!flipper_format_write_hex(file, furi_string_get_cstr(key), tmp, n_files)) {
+            break;
+        }
+
+        bool saved_files = true;
+        for (MifareDesfireFile* f = app->file_head; f; f = f->next) {
+            saved_files = false;
+
+            furi_string_printf(key, "%s File %d Type", furi_string_get_cstr(prefix), f->id);
+            if (!flipper_format_write_hex(file, furi_string_get_cstr(key), &f->type, 1)) {
+                break;
+            }
+
+            furi_string_printf(key, "%s File %d Communication Settings", furi_string_get_cstr(prefix), f->id);
+            if (!flipper_format_write_hex(file, furi_string_get_cstr(key), &f->comm, 1)) {
+                break;
+            }
+
+            furi_string_printf(key, "%s File %d Access Rights", furi_string_get_cstr(prefix), f->id);
+            if (!flipper_format_write_hex(file, furi_string_get_cstr(key), (uint8_t*)&f->access_rights, 2)) {
+                break;
+            }
+
+            uint16_t size = 0;
+            if (f->type == MifareDesfireFileTypeStandard || f->type == MifareDesfireFileTypeBackup) {
+                size = f->settings.data.size;
+                furi_string_printf(key, "%s File %d Size", furi_string_get_cstr(prefix), f->id);
+                if (!flipper_format_write_uint32(file, furi_string_get_cstr(key), &f->settings.data.size, 1)) {
+                    break;
+                }
+            } else if (f->type == MifareDesfireFileTypeValue) {
+                furi_string_printf(key, "%s File %d Hi Limit", furi_string_get_cstr(prefix), f->id);
+                if (!flipper_format_write_uint32(file, furi_string_get_cstr(key), &f->settings.value.hi_limit, 1)) {
+                    break;
+                }
+
+                furi_string_printf(key, "%s File %d Lo Limit", furi_string_get_cstr(prefix), f->id);
+                if (!flipper_format_write_uint32(file, furi_string_get_cstr(key), &f->settings.value.lo_limit, 1)) {
+                    break;
+                }
+
+                furi_string_printf(key, "%s File %d Limited Credit Value", furi_string_get_cstr(prefix), f->id);
+                if (!flipper_format_write_uint32(file, furi_string_get_cstr(key), &f->settings.value.limited_credit_value, 1)) {
+                    break;
+                }
+
+                furi_string_printf(key, "%s File %d Limited Credit Enabled", furi_string_get_cstr(prefix), f->id);
+                if (!flipper_format_write_bool(file, furi_string_get_cstr(key), &f->settings.value.limited_credit_enabled, 1)) {
+                    break;
+                }
+
+                size = 4;
+            } else if (f->type == MifareDesfireFileTypeLinearRecord || f->type == MifareDesfireFileTypeCyclicRecord) {
+                furi_string_printf(key, "%s File %d Size", furi_string_get_cstr(prefix), f->id);
+                if (!flipper_format_write_uint32(file, furi_string_get_cstr(key), &f->settings.record.size, 1)) {
+                    break;
+                }
+
+                furi_string_printf(key, "%s File %d Max", furi_string_get_cstr(prefix), f->id);
+                if (!flipper_format_write_uint32(file, furi_string_get_cstr(key), &f->settings.record.max, 1)) {
+                    break;
+                }
+
+                furi_string_printf(key, "%s File %d Cur", furi_string_get_cstr(prefix), f->id);
+                if (!flipper_format_write_uint32(file, furi_string_get_cstr(key), &f->settings.record.cur, 1)) {
+                    break;
+                }
+
+                size = f->settings.record.size * f->settings.record.cur;
+            }
+
+            if (f->contents) {
+                furi_string_printf(key, "%s File %d", furi_string_get_cstr(prefix), f->id);
+                if (!flipper_format_write_hex(file, furi_string_get_cstr(key), f->contents, size)) {
+                    break;
+                }
+            }
+
+            saved_files = true;
+        }
+
+        if (!saved_files) {
+            break;
+        }
+
         saved = true;
-    } while(false);
+    } while (false);
 
     free(tmp);
     furi_string_free(prefix);
     furi_string_free(key);
+
     return saved;
 }
 
