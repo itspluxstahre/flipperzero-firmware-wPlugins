@@ -14,17 +14,9 @@ struct DesktopMainView {
     View* view;
     DesktopMainViewCallback callback;
     void* context;
-    TimerHandle_t poweroff_timer;
     bool is_gamemode;
     bool dummy_mode;
 };
-
-#define DESKTOP_MAIN_VIEW_POWEROFF_TIMEOUT 1300
-
-static void desktop_main_poweroff_timer_callback(TimerHandle_t timer) {
-    DesktopMainView* main_view = pvTimerGetTimerID(timer);
-    main_view->callback(DesktopMainEventOpenPowerOff, main_view->context);
-}
 
 void desktop_main_set_callback(
     DesktopMainView* main_view,
@@ -72,9 +64,6 @@ bool desktop_main_input_callback(InputEvent* event, void* context) {
                 main_view->callback(
                     DesktopMainEventOpenFavoritePrimary, main_view->context); // LEFT FOR PRIMARY
             } else if(event->key == InputKeyRight) {
-                // Right key is handled by animation manager
-                // GOES TO PASSPORT NO MATTER WHAT
-                // THIS DOESNT WORK, PASSPORT WILL ONLY OPEN ON REGULAR RIGHT, NOTHING CAN GET ASSIGNED HERE
                 main_view->callback(DesktopMainEventOpenPassport, main_view->context);
             }
         } else if(event->type == InputTypeLong) {
@@ -92,20 +81,24 @@ bool desktop_main_input_callback(InputEvent* event, void* context) {
                 main_view->callback(
                     DesktopMainEventOpenFavoriteSecondary,
                     main_view->context); // HOLD LEFT FOR SECONDARY
+            } else if(event->key == InputKeyRight) {
+                Loader* loader = furi_record_open(RECORD_LOADER);
+                loader_start(loader, "Power", "about_battery", NULL);
+                furi_record_close(RECORD_LOADER);
             }
         }
     } else if(main_view->is_gamemode == true) {
         if(event->type == InputTypeShort) {
             if(event->key == InputKeyOk) {
-                main_view->callback(DesktopMainEventOpenDice, main_view->context); // OPENS Dice
-            } else if(event->key == InputKeyUp) {
                 main_view->callback(DesktopMainEventOpenSnake, main_view->context); // OPENS SNAKE
+            } else if(event->key == InputKeyUp) {
+                main_view->callback(
+                    DesktopMainEventOpenArkanoid, main_view->context); // OPENS Arkanoid
             } else if(event->key == InputKeyDown) {
-                // PREFER TO OPEN GAMES MENU
-                main_view->callback(DesktopMainEventOpen2048, main_view->context); // OPENS 2048
-            } else if(event->key == InputKeyLeft) {
                 main_view->callback(
                     DesktopMainEventOpenTetris, main_view->context); // OPENS TETRIS
+            } else if(event->key == InputKeyLeft) {
+                main_view->callback(DesktopMainEventOpenDice, main_view->context); // OPENS Dice
             }
         } else if(event->type == InputTypeLong) {
             if(event->key == InputKeyOk) {
@@ -117,6 +110,8 @@ bool desktop_main_input_callback(InputEvent* event, void* context) {
                     DesktopMainEventOpenZombiez, main_view->context); // OPENS Zombiez
             } else if(event->key == InputKeyLeft) {
                 main_view->callback(DesktopMainEventOpenClock, main_view->context); // OPENS CLOCK
+            } else if(event->key == InputKeyRight) {
+                main_view->callback(DesktopMainEventOpen2048, main_view->context); // OPENS 2048
             }
         }
     } else {
@@ -129,8 +124,7 @@ bool desktop_main_input_callback(InputEvent* event, void* context) {
                 main_view->callback(
                     DesktopMainEventOpenTetris, main_view->context); // OPENS Tetris
             } else if(event->key == InputKeyLeft) {
-                main_view->callback(
-                    DesktopMainEventOpenArkanoid, main_view->context); // OPENS Arkanoid
+                main_view->callback(DesktopMainEventOpenDice, main_view->context); // OPENS Dice
             }
         } else if(event->type == InputTypeLong) {
             if(event->key == InputKeyOk) {
@@ -142,19 +136,16 @@ bool desktop_main_input_callback(InputEvent* event, void* context) {
                     DesktopMainEventOpenZombiez, main_view->context); // OPENS Zombiez
             } else if(event->key == InputKeyLeft) {
                 main_view->callback(
-                    DesktopMainEventOpenHeap, main_view->context); // OPENS Heap Defence
+                    DesktopMainEventOpenArkanoid, main_view->context); // OPENS Arkanoid
+            } else if(event->key == InputKeyRight) {
+                main_view->callback(DesktopMainEventOpen2048, main_view->context); // OPENS 2048
             }
         }
     }
 
     if(event->key == InputKeyBack) {
-        if(event->type == InputTypePress) {
-            xTimerChangePeriod(
-                main_view->poweroff_timer,
-                pdMS_TO_TICKS(DESKTOP_MAIN_VIEW_POWEROFF_TIMEOUT),
-                portMAX_DELAY);
-        } else if(event->type == InputTypeRelease) {
-            xTimerStop(main_view->poweroff_timer, portMAX_DELAY);
+        if(event->type == InputTypeLong) {
+            main_view->callback(DesktopMainEventOpenPowerOff, main_view->context);
         }
     }
 
@@ -173,19 +164,11 @@ DesktopMainView* desktop_main_alloc() {
     view_set_context(main_view->view, main_view);
     view_set_input_callback(main_view->view, desktop_main_input_callback);
 
-    main_view->poweroff_timer = xTimerCreate(
-        NULL,
-        pdMS_TO_TICKS(DESKTOP_MAIN_VIEW_POWEROFF_TIMEOUT),
-        pdFALSE,
-        main_view,
-        desktop_main_poweroff_timer_callback);
-
     return main_view;
 }
 
 void desktop_main_free(DesktopMainView* main_view) {
     furi_assert(main_view);
     view_free(main_view->view);
-    furi_timer_free(main_view->poweroff_timer);
     free(main_view);
 }
